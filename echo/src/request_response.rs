@@ -2,22 +2,27 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RequestBody {
+pub struct InitRequestBody {
     #[serde(rename = "type")] 
     req_type: String,
     msg_id: usize,
-    node_id: Option<String>,
-    node_ids: Option<Vec<String>>,
-    echo: Option<String>,
+    node_id: String,
+    node_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ResponseBody {
+pub struct EchoRequestBody {
     #[serde(rename = "type")] 
-    resp_type: String,
+    req_type: String,
     msg_id: usize,
-    in_reply_to: usize,
-    echo: Option<String>,
+    echo: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RequestBody {
+    Init(InitRequestBody),
+    Echo(EchoRequestBody)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +32,30 @@ pub struct Request {
     body: RequestBody,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InitResponseBody {
+    #[serde(rename = "type")] 
+    resp_type: String,
+    msg_id: usize,
+    in_reply_to: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EchoResponseBody {
+    #[serde(rename = "type")] 
+    resp_type: String,
+    msg_id: usize,
+    in_reply_to: usize,
+    echo: String,
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ResponseBody {
+    Init(InitResponseBody),
+    Echo(EchoResponseBody),
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Response {
@@ -43,12 +72,24 @@ impl Request {
 
         let body = &self.body;
 
-        let response_body = if body.req_type == "init" {
-            ResponseBody {resp_type: String::from("init_ok"), echo: None, msg_id: msg_id, in_reply_to: body.msg_id}
-        } else if body.req_type == "echo" && body.echo.is_some() {
-            ResponseBody {resp_type: String::from("echo_ok"), echo: body.echo.clone(), msg_id: msg_id, in_reply_to: self.body.msg_id} 
-        } else {
-            ResponseBody {resp_type: String::from("error"), echo: None, msg_id: msg_id, in_reply_to: self.body.msg_id}
+        let response_body = match body {
+            RequestBody::Init(init_request) => {
+                let init_response = InitResponseBody{
+                    resp_type: String::from("init_ok"), 
+                    msg_id: msg_id, 
+                    in_reply_to: init_request.msg_id
+                };
+                ResponseBody::Init(init_response)
+            },
+            RequestBody::Echo(echo_request) => {
+                let echo_response = EchoResponseBody{
+                    resp_type: String::from("echo_ok"), 
+                    msg_id: msg_id,
+                    in_reply_to: echo_request.msg_id,
+                    echo: echo_request.echo.clone(),
+                };
+                ResponseBody::Echo(echo_response)
+            }
         };
 
         let resp: Response = Response {src: self.dest.clone(), dest: self.src.clone(), body: response_body};
